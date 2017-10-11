@@ -35,24 +35,51 @@ var experimental = 0;
 var storageapi = false;
 var webrtcsupport = false;
 var updated = false;
+var fakeLocalStorage = {}
+
+// Really hacky workaround to make async sync
+var lekelStorage = new Proxy({},
+	{
+		get(target, prop) {
+			return fakeLocalStorage[prop];
+		},
+		set(target, prop, val) {
+			fakeLocalStorage[prop] = val;
+			let toSet = {}
+			toSet[prop] = val;
+			browser.storage.local.set(toSet);
+			return true;
+		}
+	}
+)
+function refreshFromStorage(changes, area) {
+	if (area != "local") return
+	browser.storage.local.get(null).then((res) => {
+		for (let key in res) {
+			fakeLocalStorage[key] = res[key];
+		}
+	});
+}
+browser.storage.onChanged.addListener(refreshFromStorage);
+refreshFromStorage();
 function refreshRequestTypes() {
 	requestTypes = ['main_frame'];
-	if (browser.storage.local.get('iframe') == 'true' || browser.storage.local.get('frame') == 'true')
+	if (lekelStorage['iframe'] == 'true' || lekelStorage['frame'] == 'true')
 		requestTypes.push('sub_frame');
-	if (browser.storage.local['object'] == 'true' || browser.storage.local['embed'] == 'true')
+	if (lekelStorage['object'] == 'true' || lekelStorage['embed'] == 'true')
 		requestTypes.push('object');
-	if (browser.storage.local['script'] == 'true')
+	if (lekelStorage['script'] == 'true')
 		requestTypes.push('script');
-	if (browser.storage.local['image'] == 'true' || browser.storage.local['webbugs'] == 'true')
+	if (lekelStorage['image'] == 'true' || lekelStorage['webbugs'] == 'true')
 		requestTypes.push('image');
-	if (browser.storage.local['xml'] == 'true' || browser.storage.local['xml'] == 'all')
+	if (lekelStorage['xml'] == 'true' || lekelStorage['xml'] == 'all')
 		requestTypes.push('xmlhttprequest');
 }
 function initWebRTC() {
 	if (!webrtcsupport) return;
-	if (browser.storage.local['webrtc'] != 'off') {
+	if (lekelStorage['webrtc'] != 'off') {
 		chrome.privacy.network.webRTCIPHandlingPolicy.set({
-			value: browser.storage.local['webrtc'],
+			value: lekelStorage['webrtc'],
 		});
 	} else {
 		chrome.privacy.network.webRTCIPHandlingPolicy.set({
@@ -88,99 +115,99 @@ if (typeof chrome.webRequest !== 'undefined') {
 	}
 }
 function mitigate(req) {
-	if (browser.storage.local["enable"] == "false" || (browser.storage.local['useragentspoof'] == 'off' && browser.storage.local['cookies'] == 'false' && browser.storage.local['referrerspoof'] == 'off')) {
+	if (lekelStorage["enable"] == "false" || (lekelStorage['useragentspoof'] == 'off' && lekelStorage['cookies'] == 'false' && lekelStorage['referrerspoof'] == 'off')) {
 		return;
 	}
 	for (var i = 0; i < req.requestHeaders.length; i++) {
 		if (req.requestHeaders[i].name == 'User-Agent' || req.requestHeaders[i].name == 'Referer' || req.requestHeaders[i].name == 'Cookie') {
 			switch (req.requestHeaders[i].name) {
 				case 'Cookie':
-					if (browser.storage.local['cookies'] == 'true' && baddies(req.url, browser.storage.local['annoyancesmode'], browser.storage.local['antisocial']))
+					if (lekelStorage['cookies'] == 'true' && baddies(req.url, lekelStorage['annoyancesmode'], lekelStorage['antisocial']))
 						req.requestHeaders[i].value = '';
 					break;
 				case 'Referer':
-					if (browser.storage.local['referrerspoof'] != 'off' && (browser.storage.local['referrerspoofdenywhitelisted'] == 'true' || enabled(req.url) == 'true')) {
-						if (browser.storage.local['referrerspoof'] == 'same')
+					if (lekelStorage['referrerspoof'] != 'off' && (lekelStorage['referrerspoofdenywhitelisted'] == 'true' || enabled(req.url) == 'true')) {
+						if (lekelStorage['referrerspoof'] == 'same')
 							req.requestHeaders[i].value = req.url;
-						else if (browser.storage.local['referrerspoof'] == 'domain')
+						else if (lekelStorage['referrerspoof'] == 'domain')
 							req.requestHeaders[i].value = req.url.split("//")[0] + '//' + req.url.split("/")[2];
 						else
-							req.requestHeaders[i].value = browser.storage.local['referrerspoof'];
+							req.requestHeaders[i].value = lekelStorage['referrerspoof'];
 					}
 					break;
 				case 'User-Agent':
-					if (browser.storage.local['useragentspoof'] != 'off' && (browser.storage.local['uaspoofallow'] == 'true' || enabled(req.url) == 'true')) {
+					if (lekelStorage['useragentspoof'] != 'off' && (lekelStorage['uaspoofallow'] == 'true' || enabled(req.url) == 'true')) {
 						var os;
-						if (browser.storage.local['useragentspoof_os'] == 'w10') os = 'Windows NT 10.0';
-						else if (browser.storage.local['useragentspoof_os'] == 'w81') os = 'Windows NT 6.3';
-						else if (browser.storage.local['useragentspoof_os'] == 'w8') os = 'Windows NT 6.2';
-						else if (browser.storage.local['useragentspoof_os'] == 'w7') os = 'Windows; U; Windows NT 6.1';
-						else if (browser.storage.local['useragentspoof_os'] == 'wv') os = 'Windows; U; Windows NT 6.0';
-						else if (browser.storage.local['useragentspoof_os'] == 'w2k3') os = 'Windows; U; Windows NT 5.2';
-						else if (browser.storage.local['useragentspoof_os'] == 'wxp') os = 'Windows; U; Windows NT 5.1';
-						else if (browser.storage.local['useragentspoof_os'] == 'w98') os = 'Windows; U; Windows 98';
-						else if (browser.storage.local['useragentspoof_os'] == 'w95') os = 'Windows; U; Windows 95';
-						else if (browser.storage.local['useragentspoof_os'] == 'linux64') os = 'X11; U; Linux x86_64';
-						else if (browser.storage.local['useragentspoof_os'] == 'linux32') os = 'X11; U; Linux x86_32';
-						else if (browser.storage.local['useragentspoof_os'] == 'macsierra') os = 'Macintosh; U; Intel Mac OS X 10_12_2';
-						else if (browser.storage.local['useragentspoof_os'] == 'macelcapitan') os = 'Macintosh; U; Intel Mac OS X 10_11_6';
-						else if (browser.storage.local['useragentspoof_os'] == 'macyosemite') os = 'Macintosh; U; Intel Mac OS X 10_10_5';
-						else if (browser.storage.local['useragentspoof_os'] == 'macmavericks') os = 'Macintosh; U; Intel Mac OS X 10_9_5';
-						else if (browser.storage.local['useragentspoof_os'] == 'macmountainlion') os = 'Macintosh; U; Intel Mac OS X 10_8_5';
-						else if (browser.storage.local['useragentspoof_os'] == 'maclion') os = 'Macintosh; U; Intel Mac OS X 10_7_5';
-						else if (browser.storage.local['useragentspoof_os'] == 'macsnow') os = 'Macintosh; U; Intel Mac OS X 10_6_8';
-						else if (browser.storage.local['useragentspoof_os'] == 'chromeos') os = 'X11; U; CrOS i686 0.13.507';
-						if (browser.storage.local['useragentspoof'] == 'chrome55')
+						if (lekelStorage['useragentspoof_os'] == 'w10') os = 'Windows NT 10.0';
+						else if (lekelStorage['useragentspoof_os'] == 'w81') os = 'Windows NT 6.3';
+						else if (lekelStorage['useragentspoof_os'] == 'w8') os = 'Windows NT 6.2';
+						else if (lekelStorage['useragentspoof_os'] == 'w7') os = 'Windows; U; Windows NT 6.1';
+						else if (lekelStorage['useragentspoof_os'] == 'wv') os = 'Windows; U; Windows NT 6.0';
+						else if (lekelStorage['useragentspoof_os'] == 'w2k3') os = 'Windows; U; Windows NT 5.2';
+						else if (lekelStorage['useragentspoof_os'] == 'wxp') os = 'Windows; U; Windows NT 5.1';
+						else if (lekelStorage['useragentspoof_os'] == 'w98') os = 'Windows; U; Windows 98';
+						else if (lekelStorage['useragentspoof_os'] == 'w95') os = 'Windows; U; Windows 95';
+						else if (lekelStorage['useragentspoof_os'] == 'linux64') os = 'X11; U; Linux x86_64';
+						else if (lekelStorage['useragentspoof_os'] == 'linux32') os = 'X11; U; Linux x86_32';
+						else if (lekelStorage['useragentspoof_os'] == 'macsierra') os = 'Macintosh; U; Intel Mac OS X 10_12_2';
+						else if (lekelStorage['useragentspoof_os'] == 'macelcapitan') os = 'Macintosh; U; Intel Mac OS X 10_11_6';
+						else if (lekelStorage['useragentspoof_os'] == 'macyosemite') os = 'Macintosh; U; Intel Mac OS X 10_10_5';
+						else if (lekelStorage['useragentspoof_os'] == 'macmavericks') os = 'Macintosh; U; Intel Mac OS X 10_9_5';
+						else if (lekelStorage['useragentspoof_os'] == 'macmountainlion') os = 'Macintosh; U; Intel Mac OS X 10_8_5';
+						else if (lekelStorage['useragentspoof_os'] == 'maclion') os = 'Macintosh; U; Intel Mac OS X 10_7_5';
+						else if (lekelStorage['useragentspoof_os'] == 'macsnow') os = 'Macintosh; U; Intel Mac OS X 10_6_8';
+						else if (lekelStorage['useragentspoof_os'] == 'chromeos') os = 'X11; U; CrOS i686 0.13.507';
+						if (lekelStorage['useragentspoof'] == 'chrome55')
 							req.requestHeaders[i].value = 'Mozilla/5.0 ('+os+') AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.87 Safari/537.36';
-						else if (browser.storage.local['useragentspoof'] == 'chrome50')
+						else if (lekelStorage['useragentspoof'] == 'chrome50')
 							req.requestHeaders[i].value = 'Mozilla/5.0 ('+os+') AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.94 Safari/537.36 OPR/37.0.2178.43';
-						else if (browser.storage.local['useragentspoof'] == 'chrome14')
+						else if (lekelStorage['useragentspoof'] == 'chrome14')
 							req.requestHeaders[i].value = 'Mozilla/5.0 ('+os+') AppleWebKit/535.1 (KHTML, like Gecko) Chrome/14.0.835.94 Safari/535.1';
-						else if (browser.storage.local['useragentspoof'] == 'chrome13')
+						else if (lekelStorage['useragentspoof'] == 'chrome13')
 							req.requestHeaders[i].value = 'Mozilla/5.0 ('+os+') AppleWebKit/535.1 (KHTML, like Gecko) Chrome/13.0.782.43 Safari/535.1';
-						else if (browser.storage.local['useragentspoof'] == 'chrome12')
+						else if (lekelStorage['useragentspoof'] == 'chrome12')
 							req.requestHeaders[i].value = 'Mozilla/5.0 ('+os+') AppleWebKit/534.30 (KHTML, like Gecko) Chrome/12.0.750.0 Safari/534.30';
-						else if (browser.storage.local['useragentspoof'] == 'opera42')
+						else if (lekelStorage['useragentspoof'] == 'opera42')
 							req.requestHeaders[i].value = 'Mozilla/5.0 ('+os+') AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.75 Safari/537.36 OPR/42.0.2393.85';
-						else if (browser.storage.local['useragentspoof'] == 'opera37')
+						else if (lekelStorage['useragentspoof'] == 'opera37')
 							req.requestHeaders[i].value = 'Mozilla/5.0 ('+os+') Presto/2.9.181 Version/12.00';
-						else if (browser.storage.local['useragentspoof'] == 'opera12')
+						else if (lekelStorage['useragentspoof'] == 'opera12')
 							req.requestHeaders[i].value = 'Opera/9.80 ('+os+') Presto/2.9.181 Version/12.00';
-						else if (browser.storage.local['useragentspoof'] == 'opera11')
+						else if (lekelStorage['useragentspoof'] == 'opera11')
 							req.requestHeaders[i].value = 'Opera/9.80 ('+os+') Presto/2.9.168 Version/11.50';
-						else if (browser.storage.local['useragentspoof'] == 'firefox50')
+						else if (lekelStorage['useragentspoof'] == 'firefox50')
 							req.requestHeaders[i].value = 'Mozilla/5.0 ('+os+'; rv:50.0) Gecko/20100101 Firefox/50.0';
-						else if (browser.storage.local['useragentspoof'] == 'firefox48')
+						else if (lekelStorage['useragentspoof'] == 'firefox48')
 							req.requestHeaders[i].value = 'Mozilla/5.0 ('+os+'; rv:48.0) Gecko/20100101 Firefox/48.0';
-						else if (browser.storage.local['useragentspoof'] == 'firefox46')
+						else if (lekelStorage['useragentspoof'] == 'firefox46')
 							req.requestHeaders[i].value = 'Mozilla/5.0 ('+os+'; rv:44.0) Gecko/20100101 Firefox/44.0';
-						else if (browser.storage.local['useragentspoof'] == 'firefox6')
+						else if (lekelStorage['useragentspoof'] == 'firefox6')
 							req.requestHeaders[i].value = 'Mozilla/5.0 ('+os+'; rv:6.0a2) Gecko/20110613 Firefox/6.0a2';
-						else if (browser.storage.local['useragentspoof'] == 'firefox5')
+						else if (lekelStorage['useragentspoof'] == 'firefox5')
 							req.requestHeaders[i].value = 'Mozilla/5.0 ('+os+'; rv:5.0) Gecko/20100101 Firefox/5.0';
-						else if (browser.storage.local['useragentspoof'] == 'firefox4')
+						else if (lekelStorage['useragentspoof'] == 'firefox4')
 							req.requestHeaders[i].value = 'Mozilla/5.0 ('+os+'; rv:2.0.1) Gecko/20110606 Firefox/4.0.1';
-						else if (browser.storage.local['useragentspoof'] == 'firefox3')
+						else if (lekelStorage['useragentspoof'] == 'firefox3')
 							req.requestHeaders[i].value = 'Mozilla/5.0 ('+os+'; rv:1.9.2.9) Gecko/20100913 Firefox/3.6.9';
-						else if (browser.storage.local['useragentspoof'] == 'ie11')
+						else if (lekelStorage['useragentspoof'] == 'ie11')
 							req.requestHeaders[i].value = 'Mozilla/5.0 ('+os+'; Trident/7.0; rv:11.0) like Gecko';
-						else if (browser.storage.local['useragentspoof'] == 'ie10')
+						else if (lekelStorage['useragentspoof'] == 'ie10')
 							req.requestHeaders[i].value = 'Mozilla/5.0 (compatible; MSIE 10.0; '+os+'; Trident/6.0)';
-						else if (browser.storage.local['useragentspoof'] == 'ie9')
+						else if (lekelStorage['useragentspoof'] == 'ie9')
 							req.requestHeaders[i].value = 'Mozilla/5.0 (compatible; MSIE 9.0; '+os+')';
-						else if (browser.storage.local['useragentspoof'] == 'ie8')
+						else if (lekelStorage['useragentspoof'] == 'ie8')
 							req.requestHeaders[i].value = 'Mozilla/4.0 (compatible; MSIE 8.0; '+os+')';
-						else if (browser.storage.local['useragentspoof'] == 'ie7')
+						else if (lekelStorage['useragentspoof'] == 'ie7')
 							req.requestHeaders[i].value = 'Mozilla/4.0(compatible; MSIE 7.0; '+os+')';
-						else if (browser.storage.local['useragentspoof'] == 'ie61')
+						else if (lekelStorage['useragentspoof'] == 'ie61')
 							req.requestHeaders[i].value = 'Mozilla/4.0 (compatible; MSIE 6.1; '+os+')';
-						else if (browser.storage.local['useragentspoof'] == 'ie60')
+						else if (lekelStorage['useragentspoof'] == 'ie60')
 							req.requestHeaders[i].value = 'Mozilla/4.0 (compatible; MSIE 6.0; '+os+')';
-						else if (browser.storage.local['useragentspoof'] == 'safari8')
+						else if (lekelStorage['useragentspoof'] == 'safari8')
 							req.requestHeaders[i].value = 'Mozilla/5.0 ('+os+') AppleWebKit/600.7.12 (KHTML, like Gecko) Version/8.0.7 Safari/600.7.12';
-						else if (browser.storage.local['useragentspoof'] == 'safari7')
+						else if (lekelStorage['useragentspoof'] == 'safari7')
 							req.requestHeaders[i].value = 'Mozilla/5.0 ('+os+') AppleWebKit/537.75.14 (KHTML, like Gecko) Version/7.0.3 Safari/7046A194A';
-						else if (browser.storage.local['useragentspoof'] == 'safari5')
+						else if (lekelStorage['useragentspoof'] == 'safari5')
 							req.requestHeaders[i].value = 'Mozilla/5.0 ('+os+') AppleWebKit/533.21.1 (KHTML, like Gecko) Version/5.0.5 Safari/533.21.1';
 					}
 					break;
@@ -203,12 +230,12 @@ function UrlInList(url, elems) { // thanks vnagarnaik!
 	return foundElem;
 }
 function inlineblock(req) {
-	if (req.tabId == -1 || req.url === 'undefined' || browser.storage.local["enable"] == "false") {
+	if (req.tabId == -1 || req.url === 'undefined' || lekelStorage["enable"] == "false") {
 		return;
 	}
     var headers = req.responseHeaders;
 	if (req.type == 'main_frame') {
-		if (experimental == '1' && browser.storage.local['preservesamedomain'] == 'false' && browser.storage.local['script'] == 'true' && enabled(req.url) == 'true') {
+		if (experimental == '1' && lekelStorage['preservesamedomain'] == 'false' && lekelStorage['script'] == 'true' && enabled(req.url) == 'true') {
 			headers.push({
 				'name': 'Content-Security-Policy',
 				'value': "script-src 'none'"
@@ -218,7 +245,7 @@ function inlineblock(req) {
     return { responseHeaders: headers };
 }
 function ScriptSafe(req) {
-	if (req.tabId == -1 || req.url === 'undefined' || browser.storage.local["enable"] == "false" || req.url.substring(0,4) != 'http') {
+	if (req.tabId == -1 || req.url === 'undefined' || lekelStorage["enable"] == "false" || req.url.substring(0,4) != 'http') {
 		resetTabData(req.tabId, req.url);
 		return { cancel: false };
 	}
@@ -231,26 +258,26 @@ function ScriptSafe(req) {
 	else if (reqtype == "main_frame") reqtype = 'page';
 	var thirdPartyCheck;
 	var elementStatusCheck;
-	var baddiesCheck = baddies(req.url, browser.storage.local['annoyancesmode'], browser.storage.local['antisocial'], 2);
+	var baddiesCheck = baddies(req.url, lekelStorage['annoyancesmode'], lekelStorage['antisocial'], 2);
 	var extractedDomain = extractDomainFromURL(ITEMS[req.tabId]['url']);
 	var extractedReqDomain = extractDomainFromURL(req.url);
 	var domainCheckStatus = domainCheck(req.url, 1);
 	var tabDomainCheckStatus = domainCheck(extractedDomain, 1);
-	if (tabDomainCheckStatus == '1' || (tabDomainCheckStatus == '-1' && browser.storage.local['mode'] == 'block' && browser.storage.local['paranoia'] == 'true' && browser.storage.local['preservesamedomain'] == 'false')) {
+	if (tabDomainCheckStatus == '1' || (tabDomainCheckStatus == '-1' && lekelStorage['mode'] == 'block' && lekelStorage['paranoia'] == 'true' && lekelStorage['preservesamedomain'] == 'false')) {
 		elementStatusCheck = true;
 		thirdPartyCheck = true;
 	} else {
-		if ((domainCheckStatus == '0' && !(tabDomainCheckStatus == '-1' && browser.storage.local['mode'] == 'block' && browser.storage.local['paranoia'] == 'true')) || (browser.storage.local['preservesamedomain'] == 'strict' && extractedDomain == extractedReqDomain)) thirdPartyCheck = false;
-		else if (browser.storage.local['preservesamedomain'] == 'strict' && extractedDomain != extractedReqDomain) thirdPartyCheck = true;
+		if ((domainCheckStatus == '0' && !(tabDomainCheckStatus == '-1' && lekelStorage['mode'] == 'block' && lekelStorage['paranoia'] == 'true')) || (lekelStorage['preservesamedomain'] == 'strict' && extractedDomain == extractedReqDomain)) thirdPartyCheck = false;
+		else if (lekelStorage['preservesamedomain'] == 'strict' && extractedDomain != extractedReqDomain) thirdPartyCheck = true;
 		else thirdPartyCheck = thirdParty(req.url, extractedDomain);
-		if ((tabDomainCheckStatus == '-1' && browser.storage.local['mode'] == 'block' && browser.storage.local['paranoia'] == 'true') || (domainCheckStatus != '0' && (domainCheckStatus == '1' || (domainCheckStatus == '-1' && browser.storage.local['mode'] == 'block'))) || ((browser.storage.local['annoyances'] == 'true' && (browser.storage.local['annoyancesmode'] == 'strict' || (browser.storage.local['annoyancesmode'] == 'relaxed' && domainCheckStatus != '0'))) && baddiesCheck == '1') || (browser.storage.local['antisocial'] == 'true' && baddiesCheck == '2'))
+		if ((tabDomainCheckStatus == '-1' && lekelStorage['mode'] == 'block' && lekelStorage['paranoia'] == 'true') || (domainCheckStatus != '0' && (domainCheckStatus == '1' || (domainCheckStatus == '-1' && lekelStorage['mode'] == 'block'))) || ((lekelStorage['annoyances'] == 'true' && (lekelStorage['annoyancesmode'] == 'strict' || (lekelStorage['annoyancesmode'] == 'relaxed' && domainCheckStatus != '0'))) && baddiesCheck == '1') || (lekelStorage['antisocial'] == 'true' && baddiesCheck == '2'))
 			elementStatusCheck = true;
 		else elementStatusCheck = false;
 	}
 	var utmCleanURL = utmClean(req.url);
 	var hashCleanURL = hashTrackingClean(req.url);
 	if (elementStatusCheck && baddiesCheck && reqtype == "image") reqtype = 'webbug';
-	if ((reqtype == "page" && browser.storage.local['mode'] == 'block' && (domainCheckStatus == '1' || ((browser.storage.local['annoyances'] == 'true' && (browser.storage.local['annoyancesmode'] == 'strict' || (browser.storage.local['annoyancesmode'] == 'relaxed' && domainCheckStatus != '0'))) && baddiesCheck == '1') || (browser.storage.local['antisocial'] == 'true' && baddiesCheck == '2'))) || (reqtype == "frame" && (browser.storage.local['iframe'] == 'true' || browser.storage.local['frame'] == 'true')) || (reqtype == "script" && browser.storage.local['script'] == 'true') || (reqtype == "object" && (browser.storage.local['object'] == 'true' || browser.storage.local['embed'] == 'true')) || (reqtype == "image" && browser.storage.local['image'] == 'true') || reqtype == "webbug" || (reqtype == "xmlhttprequest" && ((browser.storage.local['xml'] == 'true' && (thirdPartyCheck || domainCheckStatus == '1' || baddiesCheck)) || browser.storage.local['xml'] == 'all'))) {
+	if ((reqtype == "page" && lekelStorage['mode'] == 'block' && (domainCheckStatus == '1' || ((lekelStorage['annoyances'] == 'true' && (lekelStorage['annoyancesmode'] == 'strict' || (lekelStorage['annoyancesmode'] == 'relaxed' && domainCheckStatus != '0'))) && baddiesCheck == '1') || (lekelStorage['antisocial'] == 'true' && baddiesCheck == '2'))) || (reqtype == "frame" && (lekelStorage['iframe'] == 'true' || lekelStorage['frame'] == 'true')) || (reqtype == "script" && lekelStorage['script'] == 'true') || (reqtype == "object" && (lekelStorage['object'] == 'true' || lekelStorage['embed'] == 'true')) || (reqtype == "image" && lekelStorage['image'] == 'true') || reqtype == "webbug" || (reqtype == "xmlhttprequest" && ((lekelStorage['xml'] == 'true' && (thirdPartyCheck || domainCheckStatus == '1' || baddiesCheck)) || lekelStorage['xml'] == 'all'))) {
 		// request qualified for filtering, so continue.
 	} else {
 		if (utmCleanURL) return { redirectUrl: utmCleanURL };
@@ -258,7 +285,7 @@ function ScriptSafe(req) {
 		return { cancel: false };
 	}
 	var cleanedUrl = removeParams(req.url);
-	if (elementStatusCheck && ((browser.storage.local['preservesamedomain'] != 'false' && (thirdPartyCheck || domainCheckStatus == '1' || baddiesCheck)) || browser.storage.local['preservesamedomain'] == 'false')) {
+	if (elementStatusCheck && ((lekelStorage['preservesamedomain'] != 'false' && (thirdPartyCheck || domainCheckStatus == '1' || baddiesCheck)) || lekelStorage['preservesamedomain'] == 'false')) {
 		if (typeof ITEMS[req.tabId]['blocked'] === 'undefined') ITEMS[req.tabId]['blocked'] = [];
 		if (!UrlInList(cleanedUrl, ITEMS[req.tabId]['blocked'])) {
 			if (extractedReqDomain.substr(0,4) == 'www.') extractedReqDomain = extractedReqDomain.substr(4);
@@ -283,7 +310,7 @@ function ScriptSafe(req) {
 	return { cancel: false };
 }
 function utmClean(url) {
-	if (browser.storage.local['utm'] == "true") {
+	if (lekelStorage['utm'] == "true") {
 		var paramstart = url.indexOf("?");
 		var sanitized = url;
 		if (paramstart != -1) {
@@ -298,7 +325,7 @@ function utmClean(url) {
 	return false;
 }
 function hashTrackingClean(url) {
-	if (browser.storage.local['hashchecking'] == "true") {
+	if (lekelStorage['hashchecking'] == "true") {
 		var hashstart = url.indexOf("#");
 		if (hashstart != -1) {
 			if (url.indexOf("=") > hashstart) {
@@ -311,30 +338,30 @@ function hashTrackingClean(url) {
 function enabled(url) {
 	if (url.indexOf("moz-extension://") != -1) return 'false'
 	var domainCheckStatus = domainCheck(url);
-	if (browser.storage.local["enable"] == "true" && domainCheckStatus != '0' && (domainCheckStatus == '1' || (browser.storage.local["mode"] == "block" && domainCheckStatus == '-1')) && url.indexOf('https://chrome.google.com/webstore') == -1 && (url.substring(0,4) == 'http' || url == 'chrome://newtab/'))
+	if (lekelStorage["enable"] == "true" && domainCheckStatus != '0' && (domainCheckStatus == '1' || (lekelStorage["mode"] == "block" && domainCheckStatus == '-1')) && url.indexOf('https://chrome.google.com/webstore') == -1 && (url.substring(0,4) == 'http' || url == 'chrome://newtab/'))
 		return 'true';
 	return 'false';
 }
 function enabledfp(domainname, fptype) {
-	if ((browser.storage.local['canvas'] == 'false' && fptype == 'fpCanvas') || (browser.storage.local['canvasfont'] == 'false' && fptype == 'fpCanvasFont') || (browser.storage.local['audioblock'] == 'false' && fptype == 'fpAudio') || (browser.storage.local['webgl'] == 'false' && fptype == 'fpWebGL') || (browser.storage.local['battery'] == 'false' && fptype == 'fpBattery') || (browser.storage.local['webrtcdevice'] == 'false' && fptype == 'fpDevice') || (browser.storage.local['gamepad'] == 'false' && fptype == 'fpGamepad') || (browser.storage.local['webvr'] == 'false' && fptype == 'fpWebVR') || (browser.storage.local['bluetooth'] == 'false' && fptype == 'fpBluetooth') || (browser.storage.local['clientrects'] == 'false' && fptype == 'fpClientRectangles') || (browser.storage.local['clipboard'] == 'false' && fptype == 'fpClipboard')) return '-1';
+	if ((lekelStorage['canvas'] == 'false' && fptype == 'fpCanvas') || (lekelStorage['canvasfont'] == 'false' && fptype == 'fpCanvasFont') || (lekelStorage['audioblock'] == 'false' && fptype == 'fpAudio') || (lekelStorage['webgl'] == 'false' && fptype == 'fpWebGL') || (lekelStorage['battery'] == 'false' && fptype == 'fpBattery') || (lekelStorage['webrtcdevice'] == 'false' && fptype == 'fpDevice') || (lekelStorage['gamepad'] == 'false' && fptype == 'fpGamepad') || (lekelStorage['webvr'] == 'false' && fptype == 'fpWebVR') || (lekelStorage['bluetooth'] == 'false' && fptype == 'fpBluetooth') || (lekelStorage['clientrects'] == 'false' && fptype == 'fpClientRectangles') || (lekelStorage['clipboard'] == 'false' && fptype == 'fpClipboard')) return '-1';
 	if (in_array(domainname, fpLists[fptype])) return '1';
 	if (in_array(domainname, fpListsSession[fptype])) return '2';
 	return '-1';
 }
 function domainCheck(domain, req) {
 	if (req === undefined) {
-		var baddiesCheck = baddies(domain, browser.storage.local['annoyancesmode'], browser.storage.local['antisocial']);
-		if (((browser.storage.local['annoyances'] == 'true' && browser.storage.local['annoyancesmode'] == 'strict' && baddiesCheck == '1') || (browser.storage.local['antisocial'] == 'true' && baddiesCheck == '2') || (browser.storage.local['annoyances'] == 'true' && browser.storage.local['annoyancesmode'] == 'relaxed' && baddiesCheck))) return '1';
+		var baddiesCheck = baddies(domain, lekelStorage['annoyancesmode'], lekelStorage['antisocial']);
+		if (((lekelStorage['annoyances'] == 'true' && lekelStorage['annoyancesmode'] == 'strict' && baddiesCheck == '1') || (lekelStorage['antisocial'] == 'true' && baddiesCheck == '2') || (lekelStorage['annoyances'] == 'true' && lekelStorage['annoyancesmode'] == 'relaxed' && baddiesCheck))) return '1';
 	}
 	var domainname = extractDomainFromURL(domain);
 	if (req != '2') {
-		if (browser.storage.local['mode'] == 'block' && in_array(domainname, sessionWhiteList)) return '0';
-		if (browser.storage.local['mode'] == 'allow' && in_array(domainname, sessionBlackList)) return '1';
+		if (lekelStorage['mode'] == 'block' && in_array(domainname, sessionWhiteList)) return '0';
+		if (lekelStorage['mode'] == 'allow' && in_array(domainname, sessionBlackList)) return '1';
 	}
 	if (in_array(domainname, whiteList)) return '0';
 	if (in_array(domainname, blackList)) return '1';
 	if (req === undefined) {
-		if (browser.storage.local['annoyances'] == 'true' && browser.storage.local['annoyancesmode'] == 'relaxed' && baddiesCheck) return '1';
+		if (lekelStorage['annoyances'] == 'true' && lekelStorage['annoyancesmode'] == 'relaxed' && baddiesCheck) return '1';
 	}
 	return '-1';
 }
@@ -396,10 +423,10 @@ function domainHandler(domain,action,listtype) {
 		action = parseInt(action);
 		// Initialize local storage
 		if (listtype == 0) {
-			if (typeof(browser.storage.local['whiteList'])==='undefined') browser.storage.local['whiteList'] = JSON.stringify([]);
-			if (typeof(browser.storage.local['blackList'])==='undefined') browser.storage.local['blackList'] = JSON.stringify([]);
-			var tempWhitelist = JSON.parse(browser.storage.local['whiteList']);
-			var tempBlacklist = JSON.parse(browser.storage.local['blackList']);
+			if (typeof(lekelStorage['whiteList'])==='undefined') lekelStorage['whiteList'] = JSON.stringify([]);
+			if (typeof(lekelStorage['blackList'])==='undefined') lekelStorage['blackList'] = JSON.stringify([]);
+			var tempWhitelist = JSON.parse(lekelStorage['whiteList']);
+			var tempBlacklist = JSON.parse(lekelStorage['blackList']);
 		} else if (listtype == 1) {
 			if (typeof(tempSessionStorage['whiteList'])==='undefined') tempSessionStorage['whiteList'] = JSON.stringify([]);
 			if (typeof(tempSessionStorage['blackList'])==='undefined') tempSessionStorage['blackList'] = JSON.stringify([]);
@@ -465,8 +492,8 @@ function domainHandler(domain,action,listtype) {
 				break;
 		}
 		if (listtype == 0) {
-			browser.storage.local['whiteList'] = JSON.stringify(tempWhitelist);
-			browser.storage.local['blackList'] = JSON.stringify(tempBlacklist);
+			lekelStorage['whiteList'] = JSON.stringify(tempWhitelist);
+			lekelStorage['blackList'] = JSON.stringify(tempBlacklist);
 			cacheLists();
 		} else if (listtype == 1) {
 			tempSessionStorage['whiteList'] = JSON.stringify(tempWhitelist);
@@ -487,10 +514,10 @@ function fpDomainHandler(domain,listtype,action,temp) {
 		action = parseInt(action);
 		// Initialize local storage
 		if (temp == 0) {
-			if (typeof(browser.storage.local[listtype])==='undefined') browser.storage.local[listtype] = JSON.stringify([]);
-			var tempList = JSON.parse(browser.storage.local[listtype]);
+			if (typeof(lekelStorage[listtype])==='undefined') lekelStorage[listtype] = JSON.stringify([]);
+			var tempList = JSON.parse(lekelStorage[listtype]);
 		} else if (temp == 1) {
-			if (typeof(browser.storage.local[listtype])==='undefined') tempSessionStorage[listtype] = JSON.stringify([]);
+			if (typeof(lekelStorage[listtype])==='undefined') tempSessionStorage[listtype] = JSON.stringify([]);
 			var tempList = JSON.parse(tempSessionStorage[listtype]);
 		}
 		// Remove domain from list
@@ -534,7 +561,7 @@ function fpDomainHandler(domain,listtype,action,temp) {
 				break;
 		}
 		if (temp == 0) {
-			browser.storage.local[listtype] = JSON.stringify(tempList);
+			lekelStorage[listtype] = JSON.stringify(tempList);
 			tempList = tempList.sort();
 			fpLists[listtype] = tempList;
 		} else if (temp == 1) {
@@ -547,10 +574,11 @@ function fpDomainHandler(domain,listtype,action,temp) {
 	return false;
 }
 function optionExists(opt) {
-	return (typeof browser.storage.local[opt] !== "undefined");
+	console.log(lekelStorage[opt]);
+	return (typeof lekelStorage[opt] !== "undefined");
 }
 function defaultOptionValue(opt, val) {
-	if (!optionExists(opt)) browser.storage.local[opt] = val;
+	if (!optionExists(opt)) lekelStorage[opt] = val;
 }
 function setDefaultOptions() {
 	defaultOptionValue("version", version);
@@ -611,20 +639,20 @@ function setDefaultOptions() {
 	defaultOptionValue("dataurl", "false");
 	defaultOptionValue("clipboard", "false");
 	defaultOptionValue("optionslist", "false");
-	if (optionExists("updatemessagenotify")) delete browser.storage.local['updatemessagenotify'];
-	if (!optionExists("blackList")) browser.storage.local['blackList'] = JSON.stringify([]);
-	if (!optionExists("whiteList")) browser.storage.local['whiteList'] = JSON.stringify(["*.googlevideo.com"]);
-	if (!optionExists("fpCanvas")) browser.storage.local['fpCanvas'] = JSON.stringify([]);
-	if (!optionExists("fpCanvasFont")) browser.storage.local['fpCanvasFont'] = JSON.stringify([]);
-	if (!optionExists("fpAudio")) browser.storage.local['fpAudio'] = JSON.stringify([]);
-	if (!optionExists("fpWebGL")) browser.storage.local['fpWebGL'] = JSON.stringify([]);
-	if (!optionExists("fpBattery")) browser.storage.local['fpBattery'] = JSON.stringify([]);
-	if (!optionExists("fpDevice")) browser.storage.local['fpDevice'] = JSON.stringify([]);
-	if (!optionExists("fpGamepad")) browser.storage.local['fpGamepad'] = JSON.stringify([]);
-	if (!optionExists("fpWebVR")) browser.storage.local['fpWebVR'] = JSON.stringify([]);
-	if (!optionExists("fpBluetooth")) browser.storage.local['fpBluetooth'] = JSON.stringify([]);
-	if (!optionExists("fpClientRectangles")) browser.storage.local['fpClientRectangles'] = JSON.stringify([]);
-	if (!optionExists("fpClipboard")) browser.storage.local['fpClipboard'] = JSON.stringify([]);
+	if (optionExists("updatemessagenotify")) delete lekelStorage['updatemessagenotify'];
+	if (!optionExists("blackList")) lekelStorage['blackList'] = JSON.stringify([]);
+	if (!optionExists("whiteList")) lekelStorage['whiteList'] = JSON.stringify(["*.googlevideo.com"]);
+	if (!optionExists("fpCanvas")) lekelStorage['fpCanvas'] = JSON.stringify([]);
+	if (!optionExists("fpCanvasFont")) lekelStorage['fpCanvasFont'] = JSON.stringify([]);
+	if (!optionExists("fpAudio")) lekelStorage['fpAudio'] = JSON.stringify([]);
+	if (!optionExists("fpWebGL")) lekelStorage['fpWebGL'] = JSON.stringify([]);
+	if (!optionExists("fpBattery")) lekelStorage['fpBattery'] = JSON.stringify([]);
+	if (!optionExists("fpDevice")) lekelStorage['fpDevice'] = JSON.stringify([]);
+	if (!optionExists("fpGamepad")) lekelStorage['fpGamepad'] = JSON.stringify([]);
+	if (!optionExists("fpWebVR")) lekelStorage['fpWebVR'] = JSON.stringify([]);
+	if (!optionExists("fpBluetooth")) lekelStorage['fpBluetooth'] = JSON.stringify([]);
+	if (!optionExists("fpClientRectangles")) lekelStorage['fpClientRectangles'] = JSON.stringify([]);
+	if (!optionExists("fpClipboard")) lekelStorage['fpClipboard'] = JSON.stringify([]);
 	if (typeof tempSessionStorage['blackList'] === "undefined") tempSessionStorage['blackList'] = JSON.stringify([]);
 	if (typeof tempSessionStorage['whiteList'] === "undefined") tempSessionStorage['whiteList'] = JSON.stringify([]);
 	if (typeof tempSessionStorage['fpCanvas'] === "undefined") tempSessionStorage['fpCanvas'] = JSON.stringify([]);
@@ -684,11 +712,11 @@ function revokeTemp() {
 	tempSessionStorage['fpClipboard'] = JSON.stringify([]);
 }
 function statuschanger() {
-	if (browser.storage.local['enable'] == 'true') {
-		browser.storage.local['enable'] = 'false';
+	if (lekelStorage['enable'] == 'true') {
+		lekelStorage['enable'] = 'false';
 		chrome.browserAction.setIcon({path: "../img/IconDisabled.png"});
 	} else {
-		browser.storage.local['enable'] = 'true';
+		lekelStorage['enable'] = 'true';
 		chrome.browserAction.setIcon({path: "../img/IconForbidden.png"});
 	}
 	reinitContext();
@@ -697,8 +725,8 @@ function tempHandler(request) {
 	if (typeof request.url === 'object') {
 		for (var i=0;i<request.url.length;i++) {
 			if (request.url[i][0] != 'no.script' && request.url[i][0] != 'web.bug') {
-				var baddiesStatus = baddies(request.url[i], browser.storage.local['annoyancesmode'], browser.storage.local['antisocial']);
-				if ((browser.storage.local['annoyances'] == 'true' && browser.storage.local['annoyancesmode'] == 'strict' && baddiesStatus == 1) || (browser.storage.local['antisocial'] == 'true' && baddiesStatus == '2')) {
+				var baddiesStatus = baddies(request.url[i], lekelStorage['annoyancesmode'], lekelStorage['antisocial']);
+				if ((lekelStorage['annoyances'] == 'true' && lekelStorage['annoyancesmode'] == 'strict' && baddiesStatus == 1) || (lekelStorage['antisocial'] == 'true' && baddiesStatus == '2')) {
 					// do nothing
 				} else {
 					if (request.mode == 'block') domainHandler(request.url[i], 0, 1);
@@ -707,8 +735,8 @@ function tempHandler(request) {
 			}
 		}
 	} else {
-		var baddiesStatus = baddies(request.url, browser.storage.local['annoyancesmode'], browser.storage.local['antisocial']);
-		if ((browser.storage.local['annoyances'] == 'true' && browser.storage.local['annoyancesmode'] == 'strict' && baddiesStatus == 1) || (browser.storage.local['antisocial'] == 'true' && baddiesStatus == '2')) {
+		var baddiesStatus = baddies(request.url, lekelStorage['annoyancesmode'], lekelStorage['antisocial']);
+		if ((lekelStorage['annoyances'] == 'true' && lekelStorage['annoyancesmode'] == 'strict' && baddiesStatus == 1) || (lekelStorage['antisocial'] == 'true' && baddiesStatus == '2')) {
 			// do nothing
 		} else {
 			if (request.mode == 'block') domainHandler(request.url, 0, 1);
@@ -731,7 +759,7 @@ chrome.tabs.onRemoved.addListener(function(tabid) {
 	if (typeof ITEMS[tabid] !== 'undefined') delete ITEMS[tabid];
 });
 chrome.tabs.onUpdated.addListener(function(tabid, changeinfo, tab) {
-	if (browser.storage.local['enable'] == 'true') {
+	if (lekelStorage['enable'] == 'true') {
 		if (changeinfo.status == 'loading') {
 			var icontype = "Allowed";
 			if (enabled(tab.url) == "true")
@@ -743,14 +771,14 @@ chrome.tabs.onUpdated.addListener(function(tabid, changeinfo, tab) {
 		} else if (changeinfo.status == "complete") {
 			if (typeof ITEMS[tabid] !== 'undefined') {
 				changed = true;
-				if (browser.storage.local['mode'] == 'block' && typeof ITEMS[tabid]['allowed'] !== 'undefined') {
+				if (lekelStorage['mode'] == 'block' && typeof ITEMS[tabid]['allowed'] !== 'undefined') {
 					for (var i=0; i<ITEMS[tabid]['allowed'].length; i++) {
 						if (in_array(extractDomainFromURL(ITEMS[tabid]['allowed'][i][0]), sessionWhiteList)) {
 							chrome.browserAction.setIcon({path: "../img/IconTemp.png", tabId: tabid});
 							break;
 						}
 					}
-				} else if (browser.storage.local['mode'] == 'allow' && typeof ITEMS[tabid]['blocked'] !== 'undefined') {
+				} else if (lekelStorage['mode'] == 'allow' && typeof ITEMS[tabid]['blocked'] !== 'undefined') {
 					for (var i=0; i<ITEMS[tabid]['blocked'].length; i++) {
 						if (in_array(extractDomainFromURL(ITEMS[tabid]['blocked'][i][0]), sessionBlackList)) {
 							chrome.browserAction.setIcon({path: "../img/IconTemp.png", tabId: tabid});
@@ -772,7 +800,7 @@ chrome.runtime.onConnect.addListener(function(port) {
 	});
 	port.onDisconnect.addListener(function() {
 		if (popup.length > 0) {
-			if (browser.storage.local['refresh'] == 'true') chrome.tabs.update(popup[1], {url: popup[0]});
+			if (lekelStorage['refresh'] == 'true') chrome.tabs.update(popup[1], {url: popup[0]});
 			popup=[];
 		}
 	});
@@ -786,7 +814,7 @@ browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
 		for (var i in fpTypes) {
 			fpListStatus[fpTypes[i]] = enabledfp(extractedDomain, fpTypes[i]);
 		}
-		sendResponse({status: browser.storage.local['enable'], enable: enabled(sender.tab.url), fp_canvas: fpListStatus['fpCanvas'], fp_canvasfont: fpListStatus['fpCanvasFont'], fp_audio: fpListStatus['fpAudio'], fp_webgl: fpListStatus['fpWebGL'], fp_battery: fpListStatus['fpBattery'], fp_device: fpListStatus['fpDevice'], fp_gamepad: fpListStatus['fpGamepad'], fp_webvr: fpListStatus['fpWebVR'], fp_bluetooth: fpListStatus['fpBluetooth'], fp_clientrectangles: fpListStatus['fpClientRectangles'], fp_clipboard: fpListStatus['fpClipboard'], experimental: experimental, mode: browser.storage.local['mode'], annoyancesmode: browser.storage.local['annoyancesmode'], antisocial: browser.storage.local['antisocial'], whitelist: whiteList, blacklist: blackList, whitelistSession: sessionWhiteList, blackListSession: sessionBlackList, script: browser.storage.local['script'], noscript: browser.storage.local['noscript'], object: browser.storage.local['object'], applet: browser.storage.local['applet'], embed: browser.storage.local['embed'], iframe: browser.storage.local['iframe'], frame: browser.storage.local['frame'], audio: browser.storage.local['audio'], video: browser.storage.local['video'], image: browser.storage.local['image'], annoyances: browser.storage.local['annoyances'], preservesamedomain: browser.storage.local['preservesamedomain'], canvas: browser.storage.local['canvas'], canvasfont: browser.storage.local['canvasfont'], audioblock: browser.storage.local['audioblock'], webgl: browser.storage.local['webgl'], battery: browser.storage.local['battery'], webrtcdevice: browser.storage.local['webrtcdevice'], gamepad: browser.storage.local['gamepad'], webvr: browser.storage.local['webvr'], bluetooth: browser.storage.local['bluetooth'], clientrects: browser.storage.local['clientrects'], timezone: browser.storage.local['timezone'], keyboard: browser.storage.local['keyboard'], keydelta: browser.storage.local['keydelta'], webbugs: browser.storage.local['webbugs'], referrer: browser.storage.local['referrer'], referrerspoofdenywhitelisted: browser.storage.local['referrerspoofdenywhitelisted'], linktarget: browser.storage.local['linktarget'], paranoia: browser.storage.local['paranoia'], clipboard: browser.storage.local['clipboard'], dataurl: browser.storage.local['dataurl']});
+		sendResponse({status: lekelStorage['enable'], enable: enabled(sender.tab.url), fp_canvas: fpListStatus['fpCanvas'], fp_canvasfont: fpListStatus['fpCanvasFont'], fp_audio: fpListStatus['fpAudio'], fp_webgl: fpListStatus['fpWebGL'], fp_battery: fpListStatus['fpBattery'], fp_device: fpListStatus['fpDevice'], fp_gamepad: fpListStatus['fpGamepad'], fp_webvr: fpListStatus['fpWebVR'], fp_bluetooth: fpListStatus['fpBluetooth'], fp_clientrectangles: fpListStatus['fpClientRectangles'], fp_clipboard: fpListStatus['fpClipboard'], experimental: experimental, mode: lekelStorage['mode'], annoyancesmode: lekelStorage['annoyancesmode'], antisocial: lekelStorage['antisocial'], whitelist: whiteList, blacklist: blackList, whitelistSession: sessionWhiteList, blackListSession: sessionBlackList, script: lekelStorage['script'], noscript: lekelStorage['noscript'], object: lekelStorage['object'], applet: lekelStorage['applet'], embed: lekelStorage['embed'], iframe: lekelStorage['iframe'], frame: lekelStorage['frame'], audio: lekelStorage['audio'], video: lekelStorage['video'], image: lekelStorage['image'], annoyances: lekelStorage['annoyances'], preservesamedomain: lekelStorage['preservesamedomain'], canvas: lekelStorage['canvas'], canvasfont: lekelStorage['canvasfont'], audioblock: lekelStorage['audioblock'], webgl: lekelStorage['webgl'], battery: lekelStorage['battery'], webrtcdevice: lekelStorage['webrtcdevice'], gamepad: lekelStorage['gamepad'], webvr: lekelStorage['webvr'], bluetooth: lekelStorage['bluetooth'], clientrects: lekelStorage['clientrects'], timezone: lekelStorage['timezone'], keyboard: lekelStorage['keyboard'], keydelta: lekelStorage['keydelta'], webbugs: lekelStorage['webbugs'], referrer: lekelStorage['referrer'], referrerspoofdenywhitelisted: lekelStorage['referrerspoofdenywhitelisted'], linktarget: lekelStorage['linktarget'], paranoia: lekelStorage['paranoia'], clipboard: lekelStorage['clipboard'], dataurl: lekelStorage['dataurl']});
 		if (typeof ITEMS[sender.tab.id] === 'undefined') {
 			resetTabData(sender.tab.id, sender.tab.url);
 		} else {
@@ -827,8 +855,8 @@ browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
 		var trustType = trustCheck(extractDomainFromURL(request.url));
 		if (trustType == '1') enableval = 3;
 		else if (trustType == '2') enableval = 4;
-		if (browser.storage.local['mode'] == 'block') sessionlist = sessionWhiteList;
-		else if (browser.storage.local['mode'] == 'allow') sessionlist = sessionBlackList;
+		if (lekelStorage['mode'] == 'block') sessionlist = sessionWhiteList;
+		else if (lekelStorage['mode'] == 'allow') sessionlist = sessionBlackList;
 		var sessionfplist = false;
 		for (var i in fpListsSession) {
 			if (fpListsSession[i].length != 0) {
@@ -836,7 +864,7 @@ browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
 				break;
 			}
 		}
-		sendResponse({status: browser.storage.local['enable'], enable: enableval, mode: browser.storage.local['mode'], annoyancesmode: browser.storage.local['annoyancesmode'], antisocial: browser.storage.local['antisocial'], annoyances: browser.storage.local['annoyances'], closepage: browser.storage.local['classicoptions'], rating: browser.storage.local['rating'], temp: sessionlist, tempfp: sessionfplist, blockeditems: ITEMS[request.tid]['blocked'], alloweditems: ITEMS[request.tid]['allowed'], domainsort: browser.storage.local['domainsort']});
+		sendResponse({status: lekelStorage['enable'], enable: enableval, mode: lekelStorage['mode'], annoyancesmode: lekelStorage['annoyancesmode'], antisocial: lekelStorage['antisocial'], annoyances: lekelStorage['annoyances'], closepage: lekelStorage['classicoptions'], rating: lekelStorage['rating'], temp: sessionlist, tempfp: sessionfplist, blockeditems: ITEMS[request.tid]['blocked'], alloweditems: ITEMS[request.tid]['allowed'], domainsort: lekelStorage['domainsort']});
 		changed = true;
 	} else if (request.reqtype == 'update-blocked') {
 		if (request.src) {
@@ -851,7 +879,7 @@ browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
 				} else if (request.node == 'Canvas Fingerprint' || request.node == 'Canvas Font Access' || request.node == 'Audio Fingerprint' || request.node == 'WebGL Fingerprint' || request.node == 'Battery Fingerprint' || request.node == 'Device Enumeration' || request.node == 'Gamepad Enumeration' || request.node == 'WebVR Enumeration' || request.node == 'Bluetooth Enumeration' || request.node == 'Spoofed Timezone' || request.node == 'Client Rectangles' || request.node == 'Clipboard Interference' || request.node == 'Data URL') {
 					ITEMS[sender.tab.id]['blocked'].push([request.src, request.node, extractedDomain, '-1', '-1', false, true]);
 				} else {
-					ITEMS[sender.tab.id]['blocked'].push([cleanedUrl, request.node, extractedDomain, domainCheck(request.src, 1), domainCheck(extractedTabDomain, 1), baddies(request.src, browser.storage.local['annoyancesmode'], browser.storage.local['antisocial'], 2), false]);
+					ITEMS[sender.tab.id]['blocked'].push([cleanedUrl, request.node, extractedDomain, domainCheck(request.src, 1), domainCheck(extractedTabDomain, 1), baddies(request.src, lekelStorage['annoyancesmode'], lekelStorage['antisocial'], 2), false]);
 				}
 				updateCount(sender.tab.id);
 			}
@@ -863,7 +891,7 @@ browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
 			if (!UrlInList(cleanedUrl, ITEMS[sender.tab.id]['allowed'])) {
 				var extractedDomain = extractDomainFromURL(request.src);
 				if (extractedDomain.substr(0,4) == 'www.') extractedDomain = extractedDomain.substr(4);
-				ITEMS[sender.tab.id]['allowed'].push([cleanedUrl, request.node, extractedDomain, domainCheck(request.src, 1), baddies(request.src, browser.storage.local['annoyancesmode'], browser.storage.local['antisocial'], 2)]);
+				ITEMS[sender.tab.id]['allowed'].push([cleanedUrl, request.node, extractedDomain, domainCheck(request.src, 1), baddies(request.src, lekelStorage['annoyancesmode'], lekelStorage['antisocial'], 2)]);
 			}
 		}
 	} else if (request.reqtype == 'save') {
@@ -905,12 +933,12 @@ chrome.commands.onCommand.addListener(function (command) {
 });
 function reinitContext() {
 	chrome.contextMenus.removeAll(function() {
-		if (browser.storage.local['showcontext'] == 'true') genContextMenu();
+		if (lekelStorage['showcontext'] == 'true') genContextMenu();
 	});
 }
 function genContextMenu() {
 	var parent = chrome.contextMenus.create({"title": "ScriptSafe", "contexts": ["page"]});
-	if (browser.storage.local['mode'] == 'block') {
+	if (lekelStorage['mode'] == 'block') {
 		chrome.contextMenus.create({"title": getLocale("allow"), "parentId": parent, "onclick": function() { contextHandle('allow'); }});
 		chrome.contextMenus.create({"title": getLocale("allow")+' ('+getLocale("temp")+')', "parentId": parent, "onclick": function() { contextHandle('allowtemp'); }});
 		chrome.contextMenus.create({"title": getLocale("allowallblocked"), "parentId": parent, "onclick": tempPage});
@@ -927,8 +955,8 @@ function genContextMenu() {
 	chrome.contextMenus.create({"title": getLocale("revoketempall"), "parentId": parent, "onclick": removeTempAll});
 	chrome.contextMenus.create({"parentId": parent, "type": "separator"});
 	chrome.contextMenus.create({"title": getLocale("options"), "parentId": parent, "onclick": function() { chrome.tabs.create({ url: chrome.extension.getURL('html/options.html')}); }});
-	if (browser.storage.local["enable"] == "false") chrome.contextMenus.create({"title": getLocale("enabless"), "parentId": parent, "onclick": function() { browser.storage.local["enable"] = "true"; contextHandle('toggle'); }});
-	else chrome.contextMenus.create({"title": getLocale("disable"), "parentId": parent, "onclick": function() { browser.storage.local["enable"] = "false"; contextHandle('toggle'); }});
+	if (lekelStorage["enable"] == "false") chrome.contextMenus.create({"title": getLocale("enabless"), "parentId": parent, "onclick": function() { lekelStorage["enable"] = "true"; contextHandle('toggle'); }});
+	else chrome.contextMenus.create({"title": getLocale("disable"), "parentId": parent, "onclick": function() { lekelStorage["enable"] = "false"; contextHandle('toggle'); }});
 }
 function contextHandle(mode) {
 	chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
@@ -952,13 +980,13 @@ function contextHandle(mode) {
 					domainHandler(tabdomain, 2);
 				}
 			} else if (mode == 'toggle') reinitContext();
-			if (browser.storage.local['refresh'] == 'true') chrome.tabs.reload(tabs[0].id);
+			if (lekelStorage['refresh'] == 'true') chrome.tabs.reload(tabs[0].id);
 		}
 	}); 
 }
 function tempPage() {
 	chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-		var tempMode = browser.storage.local['mode'];
+		var tempMode = lekelStorage['mode'];
 		if (typeof ITEMS[tabs[0].id][tempMode+'ed'] === 'undefined') return;
 		var tempDomainList = [];
 		if (domainCheck(tabs[0].url, 2) == '-1') {
@@ -969,13 +997,13 @@ function tempPage() {
 			if (items[3] == '-1') tempDomainList.push(items[2]);
 		});
 		tempHandler({reqtype: "temp", url: tempDomainList, mode: tempMode});
-		if (browser.storage.local['refresh'] == 'true') chrome.tabs.reload(tabs[0].id);
+		if (lekelStorage['refresh'] == 'true') chrome.tabs.reload(tabs[0].id);
 	});
 }
 function removeTempPage() {
 	chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
 		var tempMode;
-		if (browser.storage.local['mode'] == 'block') tempMode = 'allow';
+		if (lekelStorage['mode'] == 'block') tempMode = 'allow';
 		else tempMode = 'block';
 		if (typeof ITEMS[tabs[0].id][tempMode+'ed'] === 'undefined') return;
 		var tempDomainList = [];
@@ -987,20 +1015,20 @@ function removeTempPage() {
 			tempDomainList.push(items[2]);
 		});
 		removeTempHandler({reqtype: "remove-temp", url: tempDomainList});
-		if (browser.storage.local['refresh'] == 'true') chrome.tabs.reload(tabs[0].id);
+		if (lekelStorage['refresh'] == 'true') chrome.tabs.reload(tabs[0].id);
 	});
 }
 function removeTempAll() {
 	chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
 		revokeTemp();
-		if (browser.storage.local['refresh'] == 'true') chrome.tabs.reload(tabs[0].id);
+		if (lekelStorage['refresh'] == 'true') chrome.tabs.reload(tabs[0].id);
 	});
 }
 function freshSync(force) {
-	if (storageapi && browser.storage.local['syncenable'] == 'true') {
+	if (storageapi && lekelStorage['syncenable'] == 'true') {
 		window.clearTimeout(synctimer);
 		if (force) {
-			browser.storage.local['sync'] = 'true';
+			lekelStorage['sync'] = 'true';
 			var settingssync = {};
 			var simplesettings = '';
 			var newlimit = chrome.storage.sync.QUOTA_BYTES_PER_ITEM - 6 - 13;
@@ -1016,11 +1044,11 @@ function freshSync(force) {
 			var segment;
 			var jsonstr;
 			var i = 0;
-			for (var k in browser.storage.local) {
+			for (var k in lekelStorage) {
 				if (k != "version" && k != "sync" && k != "scriptsafe_settings" && k != "lastSync" && k != "whiteList" && k != "blackList" && k != "whiteListCount" && k != "blackListCount" && k != "whiteListCount2" && k != "blackListCount2" && k.substr(0, 10) != "whiteList_" && k.substr(0, 10) != "blackList_" && k.substr(0, 2) != "zb" && k.substr(0, 2) != "zw" && k.substr(0, 2) != "sw" && k.substr(0, 2) != "sb" && k.substr(0, 2) != "sf") {// && k.substr(0, 2) != "fp") {
-					simplesettings += k+"|"+browser.storage.local[k]+"~";
+					simplesettings += k+"|"+lekelStorage[k]+"~";
 				}/* else if (k.substr(0, 2) == "fp" && k != "fpCount") {
-					fpsettings += k+"|"+browser.storage.local[k]+"~";
+					fpsettings += k+"|"+lekelStorage[k]+"~";
 				}*/
 				if (k.substr(0, 2) == "zw") zarr['zw'].push(k);
 				else if (k.substr(0, 2) == "zb") zarr['zb'].push(k);
@@ -1030,12 +1058,12 @@ function freshSync(force) {
 			}
 			settingssync['scriptsafe_settings'] = simplesettings.slice(0,-1);
 			if (zarr['zw'].length) {
-				for (var x = 0; x < zarr['zw'].length; x++) delete browser.storage.local[zarr['zw'][x]];
+				for (var x = 0; x < zarr['zw'].length; x++) delete lekelStorage[zarr['zw'][x]];
 			}
 			if (zarr['sw'].length) {
-				for (var x = 0; x < zarr['sw'].length; x++) delete browser.storage.local[zarr['sw'][x]];
+				for (var x = 0; x < zarr['sw'].length; x++) delete lekelStorage[zarr['sw'][x]];
 			}
-			jsonstr = JSON.parse(browser.storage.local['whiteList']).toString();
+			jsonstr = JSON.parse(lekelStorage['whiteList']).toString();
 			i = 0;
 			limit = (chrome.storage.sync.QUOTA_BYTES_PER_ITEM - Math.ceil(jsonstr.length/(chrome.storage.sync.QUOTA_BYTES_PER_ITEM - 4)) - 4);
 			while (jsonstr.length > 0) {
@@ -1046,7 +1074,7 @@ function freshSync(force) {
 			}
 			settingssync['whiteListCount'] = i;
 			/*
-			jsonstr = LZString.compressToBase64(JSON.parse(browser.storage.local['whiteList']).toString());
+			jsonstr = LZString.compressToBase64(JSON.parse(lekelStorage['whiteList']).toString());
 			i = 0;
 			while (jsonstr.length > 0) {
 				segment = jsonstr.substr(0, newlimit);
@@ -1057,13 +1085,13 @@ function freshSync(force) {
 			settingssync['whiteListCount2'] = i;
 			*/
 			if (zarr['zb'].length) {
-				for (var x = 0; x < zarr['zb'].length; x++) delete browser.storage.local[zarr['zb'][x]];
+				for (var x = 0; x < zarr['zb'].length; x++) delete lekelStorage[zarr['zb'][x]];
 			}
 			if (zarr['sb'].length) {
-				for (var x = 0; x < zarr['sb'].length; x++) delete browser.storage.local[zarr['sb'][x]];
+				for (var x = 0; x < zarr['sb'].length; x++) delete lekelStorage[zarr['sb'][x]];
 			}
 			i = 0;
-			jsonstr = JSON.parse(browser.storage.local['blackList']).toString();
+			jsonstr = JSON.parse(lekelStorage['blackList']).toString();
 			limit = (chrome.storage.sync.QUOTA_BYTES_PER_ITEM - Math.ceil(jsonstr.length/(chrome.storage.sync.QUOTA_BYTES_PER_ITEM - 4)) - 4);
 			while (jsonstr.length > 0) {
 				segment = jsonstr.substr(0, limit);
@@ -1073,7 +1101,7 @@ function freshSync(force) {
 			}
 			settingssync['blackListCount'] = i;
 			/*
-			jsonstr = LZString.compressToBase64(JSON.parse(browser.storage.local['blackList']).toString());
+			jsonstr = LZString.compressToBase64(JSON.parse(lekelStorage['blackList']).toString());
 			i = 0;
 			while (jsonstr.length > 0) {
 				segment = jsonstr.substr(0, newlimit);
@@ -1085,7 +1113,7 @@ function freshSync(force) {
 			*/
 			/*
 			if (zarr['sf'].length) {
-				for (var x = 0; x < zarr['sf'].length; x++) delete browser.storage.local[zarr['sf'][x]];
+				for (var x = 0; x < zarr['sf'].length; x++) delete lekelStorage[zarr['sf'][x]];
 			}
 			i = 0;
 			jsonstr = LZString.compressToBase64(fpsettings.slice(0,-1));
@@ -1098,7 +1126,7 @@ function freshSync(force) {
 			settingssync['fpCount'] = i;
 			*/
 			settingssync['lastSync'] = milliseconds;
-			browser.storage.local['lastSync'] = milliseconds;
+			lekelStorage['lastSync'] = milliseconds;
 			if (chrome.storage.sync.QUOTA_BYTES < JSON.stringify(settingssync).length) {
 				alert('ScriptSafe cannot sync your settings as it is greater than the total limit.\r\nHowever, you can manually export and import your settings by going to the Options page.');
 			} else {
@@ -1109,7 +1137,7 @@ function freshSync(force) {
 						if (chrome.extension.lastError){
 							alert(chrome.extension.lastError.message);
 						} else {
-							if (browser.storage.local['syncnotify'] == 'true') chrome.notifications.create('syncnotify', {'type': 'basic', 'iconUrl': '../img/icon48.png', 'title': 'ScriptSafe - '+getLocale("exportsuccesstitle"), 'message': getLocale("exportsuccess")}, function(callback) { return true; } );
+							if (lekelStorage['syncnotify'] == 'true') chrome.notifications.create('syncnotify', {'type': 'basic', 'iconUrl': '../img/icon48.png', 'title': 'ScriptSafe - '+getLocale("exportsuccesstitle"), 'message': getLocale("exportsuccess")}, function(callback) { return true; } );
 						}
 					});
 				});
@@ -1127,40 +1155,40 @@ function syncQueue() {
 }
 function importSyncHandle(mode) {
 	if (storageapi) {
-		if (mode == '1' || browser.storage.local['syncenable'] == 'true' || browser.storage.local['sync'] == 'false') {
+		if (mode == '1' || lekelStorage['syncenable'] == 'true' || lekelStorage['sync'] == 'false') {
 			window.clearTimeout(synctimer);
 			browser.storage.sync.get(null).then((changes) => {
 				console.log('Checking sync data...');
 				console.log(changes);
 				if (typeof changes['lastSync'] !== 'undefined') {
-					if ((mode == '0' && changes['lastSync'] > browser.storage.local['lastSync']) || (mode == '1' && changes['lastSync'] >= browser.storage.local['lastSync'])) {
+					if ((mode == '0' && changes['lastSync'] > lekelStorage['lastSync']) || (mode == '1' && changes['lastSync'] >= lekelStorage['lastSync'])) {
 						if (confirm(getLocale("syncdetect"))) {
-							browser.storage.local['syncenable'] = 'true';
-							browser.storage.local['sync'] = 'true';
+							lekelStorage['syncenable'] = 'true';
+							lekelStorage['sync'] = 'true';
 							importSync(changes);
 							if (mode == '1') window.setTimeout(function() { window.clearTimeout(synctimer); }, 5000);
-							if (browser.storage.local['syncfromnotify'] == 'true') chrome.notifications.create('syncnotify', {'type': 'basic', 'iconUrl': '../img/icon48.png', 'title': 'ScriptSafe - '+getLocale("importsuccesstitle"), 'message': getLocale("importsuccess")}, function(callback) { updated = true; return true; });
+							if (lekelStorage['syncfromnotify'] == 'true') chrome.notifications.create('syncnotify', {'type': 'basic', 'iconUrl': '../img/icon48.png', 'title': 'ScriptSafe - '+getLocale("importsuccesstitle"), 'message': getLocale("importsuccess")}, function(callback) { updated = true; return true; });
 							return true;
 						} else {
 							if (mode != '1') {
-								browser.storage.local['syncenable'] = 'false';
+								lekelStorage['syncenable'] = 'false';
 								alert(getLocale("syncdisabled"));
-								browser.storage.local['sync'] = 'true';
+								lekelStorage['sync'] = 'true';
 							}
 							return false;
 						}
 					}
 				}
-				if (mode == '1' || (browser.storage.local['sync'] == 'false' && mode == '0')) {
+				if (mode == '1' || (lekelStorage['sync'] == 'false' && mode == '0')) {
 					if (confirm(getLocale("firstsync"))) {
-						browser.storage.local['syncenable'] = 'true';
-						browser.storage.local['sync'] = 'true';
+						lekelStorage['syncenable'] = 'true';
+						lekelStorage['sync'] = 'true';
 						if (mode == '1') freshSync();
 						else freshSync(true);
 						return true;
 					} else {
-						browser.storage.local['syncenable'] = 'false';
-						browser.storage.local['sync'] = 'true';
+						lekelStorage['syncenable'] = 'false';
+						lekelStorage['sync'] = 'true';
 						alert(getLocale("disabledsync"));
 						updated = true;
 						return false;
@@ -1170,7 +1198,7 @@ function importSyncHandle(mode) {
 		}
 	} else {
 		alert(getLocale("syncnotsupported"));
-		browser.storage.local['sync'] = 'true';
+		lekelStorage['sync'] = 'true';
 		return false;
 	}
 }
@@ -1178,7 +1206,7 @@ function importSync(changes) {
 	for (var key in changes) {
 		console.log('Saving from sync to local: '+key);
 		if (key != 'scriptsafe_settings') {
-			browser.storage.local[key] = changes[key];
+			lekelStorage[key] = changes[key];
 		} else if (key == 'scriptsafe_settings') {
 			var settings = changes[key].split("~");
 			if (settings.length > 0) {
@@ -1186,14 +1214,14 @@ function importSync(changes) {
 					if ($.trim(v) != "") {
 						var settingentry = $.trim(v).split("|");
 						if ($.trim(settingentry[1]) != '') {
-							browser.storage.local[$.trim(settingentry[0])] = $.trim(settingentry[1]);
+							lekelStorage[$.trim(settingentry[0])] = $.trim(settingentry[1]);
 						}
 					}
 				});
 			}
 		}
 	}
-	initLang(browser.storage.local['locale'], 0);
+	initLang(lekelStorage['locale'], 0);
 	listsSync();
 }
 function listsSync() {
@@ -1201,14 +1229,14 @@ function listsSync() {
 	listsSyncParse('whiteList');
 	listsSyncParse('blackList');
 	if (optionExists('fpCount')) {
-		console.log('Processing fingerprint list...'+browser.storage.local['fpCount']);
+		console.log('Processing fingerprint list...'+lekelStorage['fpCount']);
 		var concatlist = '';
 		var listerror = false;
-		for (var i = 0; i < browser.storage.local['fpCount']; i++) {
-			if (browser.storage.local['sf'+i]) {
-				if (browser.storage.local['sf'+i].substr(0, 13) == browser.storage.local['lastSync']) concatlist += browser.storage.local['sf'+i].substr(13);
+		for (var i = 0; i < lekelStorage['fpCount']; i++) {
+			if (lekelStorage['sf'+i]) {
+				if (lekelStorage['sf'+i].substr(0, 13) == lekelStorage['lastSync']) concatlist += lekelStorage['sf'+i].substr(13);
 				else listerror = true;
-				delete browser.storage.local['sf'+i];
+				delete lekelStorage['sf'+i];
 			}
 		}
 		if (!listerror) {
@@ -1221,7 +1249,7 @@ function listsSync() {
 						if ($.trim(v) != "") {
 							var settingentry = $.trim(v).split("|");
 							if ($.trim(settingentry[1]) != '') {
-								browser.storage.local[$.trim(settingentry[0])] = $.trim(settingentry[1]);
+								lekelStorage[$.trim(settingentry[0])] = $.trim(settingentry[1]);
 							}
 						}
 					});
@@ -1229,10 +1257,10 @@ function listsSync() {
 			}
 		} else {
 			alert('Incomplete fingerprint whitelist data was detected. Very large lists are known to cause issues with syncing.\r\nAs a safety precaution, your fingerprint whitelist has not been updated and syncing has been disabled on this device to prevent overwriting data on other devices.\r\nPlease consider manually exporting your latest settings and importing it into your other devices from the Options page.');
-			browser.storage.local['syncenable'] = 'false';
+			lekelStorage['syncenable'] = 'false';
 			console.log('Incomplete fingerprint whitelist data detected: import cancelled');
 		}
-		delete browser.storage.local['fpCount'];
+		delete lekelStorage['fpCount'];
 	}
 	cacheLists();
 	cacheFpLists();
@@ -1246,24 +1274,24 @@ function listsSyncParse(type) {
 		var listerror = false;
 		if (optionExists(type+'Count2')) counttype = type+'Count2';
 		else counttype = type+'Count';
-		console.log('Processing '+counttype+'...'+browser.storage.local[counttype]);
+		console.log('Processing '+counttype+'...'+lekelStorage[counttype]);
 		concatlist = '';
-		if (browser.storage.local[counttype] != '0') {
-			for (var i = 0; i < browser.storage.local[counttype]; i++) {
+		if (lekelStorage[counttype] != '0') {
+			for (var i = 0; i < lekelStorage[counttype]; i++) {
 				if (counttype == type+'Count2') {
-					if (browser.storage.local['s'+lsName+i]) {
-						if (browser.storage.local['s'+lsName+i].substr(0, 13) == browser.storage.local['lastSync']) concatlist += browser.storage.local['s'+lsName+i].substr(13);
+					if (lekelStorage['s'+lsName+i]) {
+						if (lekelStorage['s'+lsName+i].substr(0, 13) == lekelStorage['lastSync']) concatlist += lekelStorage['s'+lsName+i].substr(13);
 						else {
 							listerror = true;
 						}
-						delete browser.storage.local['s'+lsName+i];
+						delete lekelStorage['s'+lsName+i];
 					} else {
 						listerror = true;
 					}
 				} else if (counttype == type+'Count') {
-					if (browser.storage.local['z'+lsName+i]) {
-						concatlist += browser.storage.local['z'+lsName+i];
-						delete browser.storage.local['z'+lsName+i];
+					if (lekelStorage['z'+lsName+i]) {
+						concatlist += lekelStorage['z'+lsName+i];
+						delete lekelStorage['z'+lsName+i];
 					} else {
 						listerror = true;
 					}
@@ -1276,16 +1304,16 @@ function listsSyncParse(type) {
 			}
 		}
 		if (!listerror) {
-			if (concatlist == '' || concatlistarr.length == 0) browser.storage.local[type+''] = JSON.stringify([]);
-			else browser.storage.local[type+''] = JSON.stringify(concatlistarr);
+			if (concatlist == '' || concatlistarr.length == 0) lekelStorage[type+''] = JSON.stringify([]);
+			else lekelStorage[type+''] = JSON.stringify(concatlistarr);
 			console.log('Sync data verified and complete: '+type+' was imported.');
 		} else {
 			alert('Incomplete '+type.toLowerCase()+' data was detected. Very large lists are known to cause issues with syncing.\r\nAs a safety precaution, your '+type.toLowerCase()+' has not been updated and syncing has been disabled on this device to prevent overwriting data on other devices.\r\nPlease consider manually exporting your latest settings and importing it into your other devices from the Options page.');
-			browser.storage.local['syncenable'] = 'false';
+			lekelStorage['syncenable'] = 'false';
 			console.log('Incomplete '+type.toLowerCase()+' data detected: import cancelled');
 		}
-		if (optionExists(type+'Count2')) delete browser.storage.local[type+'Count2'];
-		if (optionExists(type+'Count')) delete browser.storage.local[type+'Count'];
+		if (optionExists(type+'Count2')) delete lekelStorage[type+'Count2'];
+		if (optionExists(type+'Count')) delete lekelStorage[type+'Count'];
 	}
 }
 function getUpdated() {
@@ -1302,10 +1330,10 @@ function init() {
 	initWebRTC();
 	cacheLists();
 	cacheFpLists();
-	if (browser.storage.local['showcontext'] == 'true') genContextMenu();
+	if (lekelStorage['showcontext'] == 'true') genContextMenu();
 }
 function cacheLists() {
-	var tempList = JSON.parse(browser.storage.local['whiteList']);
+	var tempList = JSON.parse(lekelStorage['whiteList']);
 	var tempDomain = [];
 	var tempWildDomain = [];
 	tempList.map(function(domain) {
@@ -1316,7 +1344,7 @@ function cacheLists() {
 	whiteList = tempDomain;
 	tempWildDomain = tempWildDomain.sort();
 	trustList = tempWildDomain;
-	tempList = JSON.parse(browser.storage.local['blackList']);
+	tempList = JSON.parse(lekelStorage['blackList']);
 	tempDomain = [];
 	tempWildDomain = [];
 	tempList.map(function(domain) {
@@ -1330,7 +1358,7 @@ function cacheLists() {
 }
 function cacheFpLists() {
 	for (var i in fpTypes) {
-		var tempList = JSON.parse(browser.storage.local[fpTypes[i]]);
+		var tempList = JSON.parse(lekelStorage[fpTypes[i]]);
 		var tempDomain = [];
 		tempList.map(function(domain) {
 			tempDomain.push(domain);
@@ -1340,7 +1368,7 @@ function cacheFpLists() {
 	}
 }
 function initLang(lang, mode) {
-	var url = chrome.extension.getURL('_locales/' + lang + '/messages.json');
+	var url = browser.extension.getURL('_locales/' + lang + '/messages.json');
 	$.ajax({
 		url: url,
 		dataType: 'json',
@@ -1370,64 +1398,64 @@ function getLangs() {
 }
 var uiLang = chrome.i18n.getUILanguage().replace(/-/g, '_');
 if (!optionExists("locale")) {
-	browser.storage.local['locale'] = 'en_US';
+	lekelStorage['locale'] = 'en_US';
 	if (uiLang != 'en' && uiLang != 'en_GB' && uiLang != 'en_US') {
 		if (typeof langs[uiLang] !== 'undefined') {
 			if (confirm('ScriptSafe detected that your browser is currently set to '+langs[uiLang]+'.\r\nWould you like to use ScriptSafe in '+langs[uiLang]+'?\r\nIf you click on "Cancel", English (US) will be set.')) {
-				browser.storage.local['locale'] = uiLang;
+				lekelStorage['locale'] = uiLang;
 			}
 		}
 	}
 } else {
 	if (typeof langs[uiLang] === 'undefined') {
-		browser.storage.local['locale'] = 'en_US';
+		lekelStorage['locale'] = 'en_US';
 	}
 }
-initLang(browser.storage.local['locale'], 1);
+initLang(lekelStorage['locale'], 1);
 function postLangLoad() {
-	if (!optionExists("version") || browser.storage.local["version"] != version) {
+	if (!optionExists("version") || lekelStorage["version"] != version) {
 		// One-time update existing whitelist/blacklist for new regex support introduced in v1.0.7.0
 		if (!optionExists("tempregexflag")) {
 			if (optionExists("version")) {
-				var tempList = JSON.parse(browser.storage.local['blackList']);
+				var tempList = JSON.parse(lekelStorage['blackList']);
 				var tempNewList = [];
 				if (tempList.length) {
 					tempList.map(function(domain) {
 						if (domain.substr(0,2) == '*.') tempNewList.push('*'+domain);
 						else tempNewList.push(domain);
 					});
-					browser.storage.local['blackList'] = JSON.stringify(tempNewList);
+					lekelStorage['blackList'] = JSON.stringify(tempNewList);
 				}
-				tempList = JSON.parse(browser.storage.local['whiteList']);
+				tempList = JSON.parse(lekelStorage['whiteList']);
 				if (tempList.length) {
 					tempNewList = [];
 					tempList.map(function(domain) {
 						if (domain.substr(0,2) == '*.') tempNewList.push('*'+domain);
 						else tempNewList.push(domain);
 					});
-					browser.storage.local['whiteList'] = JSON.stringify(tempNewList);
+					lekelStorage['whiteList'] = JSON.stringify(tempNewList);
 				}
 			}
-			browser.storage.local['tempregexflag'] = "true";
+			lekelStorage['tempregexflag'] = "true";
 			syncQueue();
 		}
-		if (browser.storage.local["updatenotify"] == "true") {
+		if (lekelStorage["updatenotify"] == "true") {
 			chrome.tabs.create({ url: chrome.extension.getURL('html/updated.html')});
 		}
-		browser.storage.local["version"] = version;
+		lekelStorage["version"] = version;
 	}
 	setDefaultOptions();
 	if (storageapi) {
 		chrome.storage.onChanged.addListener(function(changes, namespace) {
-			if (namespace == 'sync' && browser.storage.local['syncenable'] == 'true') {
+			if (namespace == 'sync' && lekelStorage['syncenable'] == 'true') {
 				console.log('Something changed!');
 				console.log(changes);
 				if (typeof changes['lastSync'] !== 'undefined') {
-					if (changes['lastSync'].newValue && changes['lastSync'].newValue > browser.storage.local['lastSync']) {
+					if (changes['lastSync'].newValue && changes['lastSync'].newValue > lekelStorage['lastSync']) {
 						console.log('Last sync is newer, so import new data');
 						chrome.storage.sync.get(null, function(changes) {
 							importSync(changes);
-							if (browser.storage.local['syncfromnotify'] == 'true') chrome.notifications.create('syncnotify', {'type': 'basic', 'iconUrl': '../img/icon48.png', 'title': 'ScriptSafe - '+getLocale("importsuccesstitle"), 'message': getLocale("importsuccess")}, function(callback) { updated = true; return true; });
+							if (lekelStorage['syncfromnotify'] == 'true') chrome.notifications.create('syncnotify', {'type': 'basic', 'iconUrl': '../img/icon48.png', 'title': 'ScriptSafe - '+getLocale("importsuccesstitle"), 'message': getLocale("importsuccess")}, function(callback) { updated = true; return true; });
 						});
 					}
 				}
