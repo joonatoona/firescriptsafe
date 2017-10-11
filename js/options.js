@@ -548,10 +548,10 @@ function downloadtxt() {
 function updateExport() {
 	settingnames = [];
 	$("#settingsexport").val("");
-	for (var i in browser.storage.local) {
-		if (i != "version" && i != "tempregexflag" && i != "whiteListCount" && i != "blackListCount" && i != "whiteListCount2" && i != "blackListCount2" && i.substr(0, 2) != "zb" && i.substr(0, 2) != "zw" && i.substr(0, 2) != "sb" && i.substr(0, 2) != "sw" && i.substr(0, 2) != "sf") {
+	for (var i in bkg.browser.storage.local) {
+		if (i != "set" && i != "remove" && i !="clear" && i !="get" && i != "version" && i != "tempregexflag" && i != "whiteListCount" && i != "blackListCount" && i != "whiteListCount2" && i != "blackListCount2" && i.substr(0, 2) != "zb" && i.substr(0, 2) != "zw" && i.substr(0, 2) != "sb" && i.substr(0, 2) != "sw" && i.substr(0, 2) != "sf") {
 			settingnames.push(i);
-			$("#settingsexport").val($("#settingsexport").val()+i+"|"+browser.storage.local[i]+"\n");
+			$("#settingsexport").val($("#settingsexport").val()+i+"|"+bkg.browser.storage.local[i]+"\n");
 		}
 	}
 	$("#settingsexport").val($("#settingsexport").val().slice(0,-1));

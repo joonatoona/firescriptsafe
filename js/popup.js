@@ -51,7 +51,7 @@ document.addEventListener('DOMContentLoaded', function () {
 	$("#pop_ay").mouseup(function(e) { if (e.which != 3) openTab('https://twitter.com/andryou'); });
 	$("#pop_docs").mouseup(function(e) { if (e.which != 3) openTab('https://www.andryou.com/scriptsafe/'); });
 	$("#pop_project").mouseup(function(e) { if (e.which != 3) openTab('https://github.com/joonatoona/firescriptsafe'); });
-	$("#pop_options").mouseup(function(e) { if (e.which != 3) openTab(chrome.extension.getURL('html/options.html')); });
+	$("#pop_options").mouseup(function(e) { if (e.which != 3) openTab(browser.extension.getURL('html/options.html')); });
 	$("#pop_webstore").mouseup(function(e) { if (e.which != 3) openTab('https://chrome.google.com/webstore/detail/scriptsafe/oiigbmnaadbkfbmpbfijlflahbdbdgdf'); });
 	$("#pop_close").mouseup(function(e) { if (e.which != 3) window.close(); }).attr('title', bkg.getLocale("close"));
 	$("#pop_refresh").mouseup(function(e) { if (e.which != 3) chrome.tabs.reload(); window.close(); });
@@ -66,7 +66,7 @@ function init() {
 			tabdomain = bkg.extractDomainFromURL(taburl);
 			if (tabdomain.substr(0,4) == 'www.') tabdomain = tabdomain.substr(4);
 			tabid = tab.id;
-			if (tabdomain == 'chrome.google.com' || taburl.indexOf('chrome-extension://') == 0) {
+			if (tabdomain == 'chrome.google.com' || taburl.indexOf('moz-extension://') == 0) {
 				$("#currentdomain").html(bkg.getLocale("notfiltered"));
 				$(".thirds").html('<i>'+bkg.getLocale("noexternal")+'</i>');
 			} else {
