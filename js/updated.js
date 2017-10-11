@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 function disableNotification() {
 	if (confirm(bkg.getLocale("updatedisable"))) {
-		localStorage['updatenotify'] = 'false';
+		browser.storage.local['updatenotify'] = 'false';
 		$('#message').html(bkg.getLocale("updatedisablemessage")).stop().fadeIn("slow").delay(2000).fadeOut("slow");
 	}
 }

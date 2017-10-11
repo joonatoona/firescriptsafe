@@ -2,8 +2,8 @@
 // Distributed under the terms of the GNU General Public License
 // The GNU General Public License can be found in the gpl.txt file. Alternatively, see <http://www.gnu.org/licenses/>.
 var version = '1.0.9.2';
-var port = chrome.runtime.connect({name: "popuplifeline"});
-var bkg = chrome.extension.getBackgroundPage();
+var port = browser.runtime.connect({name: "popuplifeline"});
+var bkg = browser.extension.getBackgroundPage();
 var closepage, mode, taburl, tabid, tabdomain;
 var selected = false;
 var intemp = false;
@@ -60,7 +60,8 @@ function init() {
 	$("#version").html(version);
 	$("#pop_options").html(bkg.getLocale("options"));
 	chrome.windows.getCurrent(function(w) {
-		chrome.tabs.getSelected(w.id, function(tab) {
+		browser.tabs.query({currentWindow: true, active: true}).then((tabarr) => {
+            tab = tabarr[0];
 			taburl = tab.url;
 			tabdomain = bkg.extractDomainFromURL(taburl);
 			if (tabdomain.substr(0,4) == 'www.') tabdomain = tabdomain.substr(4);
@@ -69,7 +70,7 @@ function init() {
 				$("#currentdomain").html(bkg.getLocale("notfiltered"));
 				$(".thirds").html('<i>'+bkg.getLocale("noexternal")+'</i>');
 			} else {
-				chrome.extension.sendRequest({reqtype: "get-list", url: taburl, tid: tabid}, function(response) {
+				browser.runtime.sendMessage({reqtype: "get-list", url: taburl, tid: tabid}).then((response) => {
 					if (typeof response === 'undefined' || response == 'reload') {
 						if (tab.url.substring(0, 4) == 'http') {
 							$("table").html('<tr><td>'+bkg.getLocale("recentlyupdated")+'</td></tr>');
@@ -429,11 +430,11 @@ function bulk(el) {
 	if (el.hasClass("prevoke")) {
 		if (mode == 'block') urlarray = allowed;
 		else urlarray = blocked;
-		chrome.extension.sendRequest({reqtype: "remove-temp", url: urlarray});
+		browser.runtime.sendMessage({reqtype: "remove-temp", url: urlarray});
 	} else {
 		if (mode == 'block') urlarray = blocked;
 		else urlarray = allowed;
-		chrome.extension.sendRequest({reqtype: "temp", url: urlarray, mode: mode});
+		browser.runtime.sendMessage({reqtype: "temp", url: urlarray, mode: mode});
 	}
 	window.close();
 }
@@ -469,7 +470,7 @@ function remove(url, el, type) {
 		}
 	}
 	bkg.triggerUpdated();
-	chrome.extension.sendRequest({reqtype: "refresh-page-icon", tid: tabid, type: 1});
+	browser.runtime.sendMessage({reqtype: "refresh-page-icon", tid: tabid, type: 1});
 	if (closepage == 'true') window.close();
 	else {
 		var urlfriendly = url.replace(/[.\[\]:]/g,"_");
@@ -518,10 +519,10 @@ function save(url, el, type) {
 		else if (fpType == 'clipboard.interference') fpList = 'fpClipboard';
 		if (val < 2) {
 			bkg.fpDomainHandler(url, fpList, -1, 1);
-			chrome.extension.sendRequest({reqtype: "save-fp", url: url, list: fpList});
+			browser.runtime.sendMessage({reqtype: "save-fp", url: url, list: fpList});
 		} else if (val == 2) {
-			if (selected) chrome.extension.sendRequest({reqtype: "remove-temp-fp", url: url, list: fpList});
-			else chrome.extension.sendRequest({reqtype: "temp-fp", url: url, list: fpList});
+			if (selected) browser.runtime.sendMessage({reqtype: "remove-temp-fp", url: url, list: fpList});
+			else browser.runtime.sendMessage({reqtype: "temp-fp", url: url, list: fpList});
 		} else if (val == 3) {
 			bkg.topHandler(url, fpList);
 			val = 0;
@@ -529,10 +530,10 @@ function save(url, el, type) {
 	} else {
 		if (val < 2) {
 			bkg.domainHandler(url, '2', '1');
-			chrome.extension.sendRequest({reqtype: "save", url: url, list: val});
+			browser.runtime.sendMessage({reqtype: "save", url: url, list: val});
 		} else if (val == 2) {
-			if (selected) chrome.extension.sendRequest({reqtype: "remove-temp", url: url});
-			else chrome.extension.sendRequest({reqtype: "temp", url: url, mode: mode});
+			if (selected) browser.runtime.sendMessage({reqtype: "remove-temp", url: url});
+			else browser.runtime.sendMessage({reqtype: "temp", url: url, mode: mode});
 		} else if (val == 3) {
 			bkg.topHandler(url, 0);
 			val = 0;
@@ -542,7 +543,7 @@ function save(url, el, type) {
 		}
 	}
 	bkg.triggerUpdated();
-	if (url == tabdomain) chrome.extension.sendRequest({reqtype: "refresh-page-icon", tid: tabid, type: val});
+	if (url == tabdomain) browser.runtime.sendMessage({reqtype: "refresh-page-icon", tid: tabid, type: val});
 	if (closepage == 'true') window.close();
 	else {
 		var urlfriendly = url.replace(/[.\[\]:]/g,"_");
