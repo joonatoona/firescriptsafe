@@ -30,7 +30,7 @@
    "content_scripts": [ {
       "all_frames": true,
       "js": [ "js/jquery.js", "js/common.js", "js/yoyo.js", "js/ss.js" ],
-      "matches": [ "<all_urls>" ],
+      "matches": [ "http://*/*", "https://*/*" ],
       "run_at": "document_start"
    } ],
    "description": "__MSG_appdescription__",
