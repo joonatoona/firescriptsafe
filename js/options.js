@@ -759,7 +759,6 @@ function importbulk(type) {
 	}
 }
 function listUpdate() {
-	console.log(bkg.lekelStorage['whiteList'])
 	var whiteList = JSON.parse(bkg.lekelStorage['whiteList']);
 	var blackList = JSON.parse(bkg.lekelStorage['blackList']);
 	var whitelistCompiled = '';

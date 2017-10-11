@@ -58,9 +58,12 @@ function refreshFromStorage(changes, area) {
 		for (let key in res) {
 			fakeLocalStorage[key] = res[key];
 		}
+		sessionWhiteList = JSON.parse(fakeLocalStorage["whiteList"]);
+		sessionBlackList = JSON.parse(fakeLocalStorage["blackList"]);
 	});
 }
 browser.storage.onChanged.addListener(refreshFromStorage);
+
 refreshFromStorage();
 function refreshRequestTypes() {
 	requestTypes = ['main_frame'];
@@ -574,7 +577,6 @@ function fpDomainHandler(domain,listtype,action,temp) {
 	return false;
 }
 function optionExists(opt) {
-	console.log(lekelStorage[opt]);
 	return (typeof lekelStorage[opt] !== "undefined");
 }
 function defaultOptionValue(opt, val) {
@@ -805,9 +807,7 @@ chrome.runtime.onConnect.addListener(function(port) {
 		}
 	});
 });
-console.log("Adding Listener");
 browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    console.log(request);
 	if (request.reqtype == 'get-settings') {
 		var fpListStatus = [];
 		var extractedDomain = extractDomainFromURL(sender.tab.url);
@@ -1411,7 +1411,6 @@ if (!optionExists("locale")) {
 		lekelStorage['locale'] = 'en_US';
 	}
 }
-initLang(lekelStorage['locale'], 1);
 function postLangLoad() {
 	if (!optionExists("version") || lekelStorage["version"] != version) {
 		// One-time update existing whitelist/blacklist for new regex support introduced in v1.0.7.0
